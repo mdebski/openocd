@@ -42,6 +42,10 @@
  * r8 - wp, tmp
  */
 
+/* load flash addr */
+ldr   r8, CC_FADDR_REG
+str   r2, [r8] /* set write addr */
+
 wait_fifo:
 	ldr 	r8, [r0, #0]	/* read wp */
 	cmp 	r8, #0		/* abort if wp == 0 */
@@ -50,12 +54,6 @@ wait_fifo:
 	subs	r6, r8, r7	/* number of bytes available for read in r6*/
 	cmp 	r6, #3		/* wait until 4 bytes are available */
 	bcc 	wait_fifo
-
-init:
-
-  /* load flash addr */
-  ldr   r8, CC_FADDR_REG
-  str   r2, [r8] /* set write addr */
 
   /* set fctl.write */
   ldr   r8, CC_FCTL_REG
@@ -67,21 +65,17 @@ init:
 	ldr 	r6, [r7], #0x04 /* read one word from src, increment ptr */
   ldr   r8, CC_FWDATA_REG
   str   r6, [r8]
-  mov   r11, #0 // DEBUG
-	ldr 	r8, CC_FCTL_REG // DEBUG
-  ldr   r10, [r8] // DEBUG
 
 busy:
-  add   r11, r11, #1 // DEBUG
 	ldr 	r8, CC_FCTL_REG
   ldr   r6, [r8]
 	tst 	r6, #64 /* FULL */
 	bne 	busy
 
   tst r6, #32 /* ABORT */
-  bne   err_abort
+  bne   error
   tst r6, #2 /* WRITE */
-  beq   err_notwrite
+  beq   error
 
 	cmp 	r7, r1		/* wrap rp at end of buffer */
 	it  	cs
@@ -91,29 +85,14 @@ busy:
 	cbz 	r3, ok	/* loop if not done */
 	b	wait_fifo
 
-err_abort:
-  mov r0, 0xaa
-  mov r12, 0xaa
-  b error
-err_notwrite:
-  mov r0, 0xbb
-  mov r12, 0xbb
-  b error
-
 ok:
 	mov	r0, #0		/* clear r0 on success */
   b exit
 error:
-  /* set r0 on error to (err_code; fctl) */
-  lsl r0, #16
-  mov r1, #255
-  and r6, r6, r1
-  orr r0, r0, r6
+  mov r0, #1    /* set r0 on error */
 	movs	r1, #0
 	str	r1, [r0, #4]	/* set rp = 0 on error */
 exit:
-  ldr   r8, CC_FADDR_REG
-  ldr   r4, [r8] /* set write addr */
 	bkpt	#0x00
 
 .align 2
