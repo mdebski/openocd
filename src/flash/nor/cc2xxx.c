@@ -22,6 +22,8 @@
 #endif
 
 #include "imp.h"
+#include <target/algorithm.h>
+#include <target/armv7m.h>
 
 /* References
  *
@@ -192,7 +194,98 @@ static int cc2xxx_protect(struct flash_bank *bank, int set, int first, int last)
 static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
     uint32_t offset, uint32_t count)
 {
-  NYI;
+	struct target *target = bank->target;
+	uint32_t addr = bank->base + offset;
+	struct working_area *target_buf;
+	struct working_area *target_write_alg;
+	uint32_t buf_size = 8192;
+	struct reg_param reg_params[4];
+	struct armv7m_algorithm armv7m_info;
+  int retval;
+
+	if (bank->target->state != TARGET_HALTED) {
+		LOG_ERROR("Target not halted");
+		return ERROR_TARGET_NOT_HALTED;
+	}
+
+	if (offset & 0x3) {
+		LOG_WARNING("offset 0x%" PRIx32 " breaks required 4-byte alignment",
+					offset);
+		return ERROR_FLASH_DST_BREAKS_ALIGNMENT;
+	}
+
+	if (count & 0x3) {
+		LOG_WARNING("Padding %d bytes to keep 4-byte write size",
+					       count & 3);
+		count = (count + 3) & ~3;
+  }
+
+	armv7m_info.common_magic = ARMV7M_COMMON_MAGIC;
+	armv7m_info.core_mode = ARM_MODE_THREAD;
+
+  static const uint8_t cc2xxx_write_alg[] = {
+    0xd0, 0xf8, 0x00, 0x80, 0xb8, 0xf1, 0x00, 0x0f, 0x2d, 0xd0, 0x47, 0x68,
+    0xb8, 0xeb, 0x07, 0x06, 0x03, 0x2e, 0xf5, 0xd3, 0xdf, 0xf8, 0x54, 0x80,
+    0xd8, 0xf8, 0x00, 0x60, 0x46, 0xf0, 0x10, 0x06, 0xc8, 0xf8, 0x00, 0x60,
+    0xdf, 0xf8, 0x48, 0x80, 0xc8, 0xf8, 0x00, 0x20, 0x57, 0xf8, 0x04, 0x6b,
+    0xdf, 0xf8, 0x40, 0x80, 0xc8, 0xf8, 0x00, 0x60, 0x04, 0x32, 0xbf, 0xf3,
+    0x4f, 0x8f, 0xdf, 0xf8, 0x2c, 0x80, 0xd8, 0xf8, 0x00, 0x60, 0x16, 0xf0,
+    0x40, 0x0f, 0xf8, 0xd1, 0x16, 0xf0, 0x20, 0x0f, 0x07, 0xd1, 0x8f, 0x42,
+    0x28, 0xbf, 0x00, 0xf1, 0x08, 0x07, 0x47, 0x60, 0x01, 0x3b, 0x13, 0xb1,
+    0xce, 0xe7, 0x00, 0x21, 0x41, 0x60, 0x30, 0x46, 0x00, 0xbe, 0x00, 0xbf,
+    0x08, 0x30, 0x0d, 0x40, 0x0c, 0x30, 0x0d, 0x40, 0x10, 0x30, 0x0d, 0x40
+  };
+
+
+	retval = target_alloc_working_area(target, sizeof(cc2xxx_write_alg),
+      &target_write_alg);
+  if(retval != ERROR_OK) {
+		LOG_WARNING("no working area available, can't do block memory writes");
+		return ERROR_TARGET_RESOURCE_NOT_AVAILABLE;
+	};
+	retval = target_alloc_working_area(target, buf_size, &target_buf);
+  if(retval != ERROR_OK) {
+    target_free_working_area(target, target_write_alg);
+		LOG_WARNING("no working area available, can't do block memory writes");
+		return ERROR_TARGET_RESOURCE_NOT_AVAILABLE;
+	};
+
+  retval = target_write_buffer(target, target_write_alg->address,
+      sizeof(cc2xxx_write_alg), cc2xxx_write_alg);
+  if(retval != ERROR_OK) return retval;
+
+	init_reg_param(&reg_params[0], "r0", 32, PARAM_IN_OUT);	/* buffer start, status (out) */
+	init_reg_param(&reg_params[1], "r1", 32, PARAM_OUT);	/* buffer end */
+	init_reg_param(&reg_params[2], "r2", 32, PARAM_OUT);	/* target address */
+	init_reg_param(&reg_params[3], "r3", 32, PARAM_OUT);	/* count */
+
+	buf_set_u32(reg_params[0].value, 0, 32, target_buf->address);
+	buf_set_u32(reg_params[1].value, 0, 32, target_buf->address + target_buf->size);
+	buf_set_u32(reg_params[2].value, 0, 32, addr);
+	buf_set_u32(reg_params[3].value, 0, 32, count / 4);
+
+  // This will handle copying data to sram
+  retval = target_run_flash_async_algorithm(target, buffer, count, 1,
+      0, NULL, 4, reg_params,
+      target_buf->address, buf_size,
+      target_write_alg->address, 0,
+      &armv7m_info);
+
+  if(retval != ERROR_OK) {
+		uint32_t error = buf_get_u32(reg_params[0].value, 0, 32);
+    LOG_ERROR("write algorithm error: %08x", error);
+    return retval;
+  }
+
+  target_free_working_area(target, target_buf);
+  target_free_working_area(target, target_write_alg);
+
+	destroy_reg_param(&reg_params[0]);
+	destroy_reg_param(&reg_params[1]);
+	destroy_reg_param(&reg_params[2]);
+	destroy_reg_param(&reg_params[3]);
+
+  return ERROR_OK;
 }
 
 static int cc2xxx_fetch_info(struct flash_bank *bank) {
