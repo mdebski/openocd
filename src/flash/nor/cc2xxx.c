@@ -198,6 +198,14 @@ static int cc2xxx_probe(struct flash_bank *bank)
 		bank->sectors[i].is_protected = 1;
 	}
 
+  uint32_t lock_bit_base;
+  cc2xxx_get_lock_bit_base(bank, &lock_bit_base);
+  uint32_t val;
+  target_read_u32(bank->target, lock_bit_base - 4, &val);
+  LOG_DEBUG("entry point: 0x%08x", val);
+  target_read_u32(bank->target, lock_bit_base - 8, &val);
+  LOG_DEBUG("image valid (yes if 0): 0x%08x", val);
+
   cc2xxx_info->probed = 1;
 
   return ERROR_OK;
