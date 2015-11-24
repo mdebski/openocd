@@ -79,13 +79,25 @@ FLASH_BANK_COMMAND_HANDLER(cc2xxx_flash_bank_command)
 	return ERROR_OK;
 }
 
+static int cc2xxx_get_lock_bit_base(struct flash_bank *bank, uint32_t *lock_bit_base) {
+	struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
+  *lock_bit_base = CC_FLASH_BASE + cc2xxx_info->flash_size_b
+                   - CC_FLASH_PAGE_SIZE + CC_LOCK_BITS_OFFSET;
+
+  if(*lock_bit_base < CC_FLASH_BASE || *lock_bit_base > CC_FLASH_TOP) {
+    LOG_ERROR("invalid lock_bit_base: %08x", *lock_bit_base);
+    return ERROR_FAIL;
+  }
+
+  return ERROR_OK;
+}
+
 static int cc2xxx_protect_check(struct flash_bank *bank)
 {
 	struct target *target = bank->target;
-	struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
 
-  uint32_t lock_bit_base = CC_FLASH_BASE + cc2xxx_info->flash_size_b
-                           - CC_FLASH_PAGE_SIZE + CC_LOCK_BITS_OFFSET;
+  uint32_t lock_bit_base;
+  cc2xxx_get_lock_bit_base(bank, &lock_bit_base);
 
   LOG_DEBUG("lock_bit_base: %08x", lock_bit_base);
 
