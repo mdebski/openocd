@@ -31,7 +31,7 @@
 
 /*
  * Params:
- * r0 = workarea start, status (out)
+ * r0 = workarea start, error (out)
  * r1 = workarea end
  * r2 = target address
  * r3 = count
@@ -42,9 +42,9 @@
  * r8 - wp, tmp
  */
 
-/* load flash addr */
+/* Load flash write address. It gets incremented by flash driver on write. */
 ldr   r8, CC_FADDR_REG
-str   r2, [r8] /* set write addr */
+str   r2, [r8]
 
 wait_fifo:
 	ldr 	r8, [r0, #0]	/* read wp */
@@ -55,26 +55,30 @@ wait_fifo:
 	cmp 	r6, #3		/* wait until 4 bytes are available */
 	bcc 	wait_fifo
 
-  /* set fctl.write */
+  /* Set fctl.write.
+   * It may be already set in subsequent iterations, but also may not,
+   * because of a long fifo wait.
+   */
   ldr   r8, CC_FCTL_REG
   ldr   r6, [r8]
   orr   r6, r6, #2
   str   r6, [r8]
 
-  /* write data */
+  /* Write data. */
 	ldr 	r6, [r7], #0x04 /* read one word from src, increment ptr */
   ldr   r8, CC_FWDATA_REG
   str   r6, [r8]
 
 busy:
+  /* Wait for fctl.full == 0 */
 	ldr 	r8, CC_FCTL_REG
   ldr   r6, [r8]
 	tst 	r6, #64 /* FULL */
 	bne 	busy
 
-  tst r6, #32 /* ABORT */
+  tst r6, #32 /* if fctl.abort == 1 page is locked */
   bne   error
-  tst r6, #2 /* WRITE */
+  tst r6, #2 /* if fctl.write == 0 we didn't supply data fast enough */
   beq   error
 
 	cmp 	r7, r1		/* wrap rp at end of buffer */
@@ -99,4 +103,3 @@ exit:
 CC_FCTL_REG:    .word 0x400d3008
 CC_FADDR_REG:   .word 0x400d300c
 CC_FWDATA_REG:  .word 0x400d3010
-CC_FADDR_MASK:  .word 0x0001ffff
