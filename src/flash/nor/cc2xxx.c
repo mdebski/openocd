@@ -50,6 +50,9 @@
 #define CC_FCTL_FULL        (1<<6)
 #define CC_FCTL_BUSY        (1<<7)
 
+// Number of first byte in CCA page which contains lock bits.
+#define CC_LOCK_BITS_OFFSET 2016
+
 #define NYI LOG_ERROR("Not Implemented Yet"); return ERROR_FAIL;
 
 struct cc2xxx_flash_bank {
@@ -78,7 +81,29 @@ FLASH_BANK_COMMAND_HANDLER(cc2xxx_flash_bank_command)
 
 static int cc2xxx_protect_check(struct flash_bank *bank)
 {
-	NYI;
+	struct target *target = bank->target;
+	struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
+
+  uint32_t lock_bit_base = CC_FLASH_BASE + cc2xxx_info->flash_size_b
+                           - CC_FLASH_PAGE_SIZE + CC_LOCK_BITS_OFFSET;
+
+  LOG_DEBUG("lock_bit_base: %08x", lock_bit_base);
+
+  // Each byte of lock bit page holds lock bits for 8 pages.
+  int bytes_to_read = (bank->num_sectors + 7) / 8;
+  uint8_t lock_bits;
+
+  int i, j, retval;
+	for (i=0;i<bytes_to_read;++i) {
+    retval = target_read_u8(target, lock_bit_base + i, &lock_bits);
+	  if (retval != ERROR_OK) return retval;
+    for(j=0;j<8 && 8*i+j < bank->num_sectors;++j) {
+      // 1 - write/erase allowed, 0 - write/erase blocked
+		  bank->sectors[8*i + j].is_protected = lock_bits & (1<<j) ? 0 : 1;
+    }
+	}
+
+  return ERROR_OK;
 }
 
 static int cc2xxx_erase(struct flash_bank *bank, int first, int last)
