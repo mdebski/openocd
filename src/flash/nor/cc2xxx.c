@@ -50,7 +50,7 @@
 #define CC_FCTL_FULL        (1<<6)
 #define CC_FCTL_BUSY        (1<<7)
 
-#define ERROR_NYI ERROR_FAIL
+#define NYI LOG_ERROR("Not Implemented Yet"); return ERROR_FAIL;
 
 struct cc2xxx_flash_bank {
   int probed;
@@ -78,23 +78,23 @@ FLASH_BANK_COMMAND_HANDLER(cc2xxx_flash_bank_command)
 
 static int cc2xxx_protect_check(struct flash_bank *bank)
 {
-	return ERROR_NYI;
+	NYI;
 }
 
 static int cc2xxx_erase(struct flash_bank *bank, int first, int last)
 {
-	return ERROR_NYI;
+	NYI;
 }
 
 static int cc2xxx_protect(struct flash_bank *bank, int set, int first, int last)
 {
-	return ERROR_NYI;
+	NYI;
 }
 
 static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
 		uint32_t offset, uint32_t count)
 {
-	return ERROR_NYI;
+	NYI;
 }
 
 static int cc2xxx_fetch_info(struct flash_bank *bank) {
