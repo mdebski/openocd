@@ -998,6 +998,7 @@ int target_run_flash_async_algorithm(struct target *target,
 
 	if (retval != ERROR_OK) {
 		/* abort flash write algorithm on target */
+    LOG_DEBUG("Aborting target algorithm");
 		target_write_u32(target, wp_addr, 0);
 	}
 
