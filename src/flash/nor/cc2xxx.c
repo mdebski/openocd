@@ -70,23 +70,23 @@ struct cc2xxx_flash_bank {
 /* flash bank cc2xxx <base> <size> 0 0 <target#> */
 FLASH_BANK_COMMAND_HANDLER(cc2xxx_flash_bank_command)
 {
-	if (CMD_ARGC < 6)
-		return ERROR_COMMAND_SYNTAX_ERROR;
+  if (CMD_ARGC < 6)
+    return ERROR_COMMAND_SYNTAX_ERROR;
 
   struct cc2xxx_flash_bank *cc2xxx_info = malloc(sizeof(struct cc2xxx_flash_bank));
-	if (!cc2xxx_info) {
+  if (!cc2xxx_info) {
     LOG_WARNING("cannot allocate host memory");
-		return ERROR_FAIL;
+    return ERROR_FAIL;
   }
   bank->driver_priv = cc2xxx_info;
 
   cc2xxx_info->probed = 0;
 
-	return ERROR_OK;
+  return ERROR_OK;
 }
 
 static int cc2xxx_get_lock_bit_base(struct flash_bank *bank, uint32_t *lock_bit_base) {
-	struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
+  struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
   *lock_bit_base = CC_FLASH_BASE + cc2xxx_info->flash_size_b
                    - CC_FLASH_PAGE_SIZE + CC_LOCK_BITS_OFFSET;
 
@@ -100,13 +100,13 @@ static int cc2xxx_get_lock_bit_base(struct flash_bank *bank, uint32_t *lock_bit_
 
 static int cc2xxx_wait(struct flash_bank *bank, int timeout)
 {
-	struct target *target = bank->target;
+  struct target *target = bank->target;
   uint32_t fctl;
   int retval;
 
   while(timeout--) {
     retval = target_read_u32(target, CC_FCTL_REG, &fctl);
-	  if (retval != ERROR_OK) return retval;
+    if (retval != ERROR_OK) return retval;
     if((fctl & CC_FCTL_BUSY) == 0) return ERROR_OK;
     alive_sleep(1);
   }
@@ -117,21 +117,21 @@ static int cc2xxx_wait(struct flash_bank *bank, int timeout)
 
 static int cc2xxx_fctl_set(struct flash_bank *bank, uint32_t mask)
 {
-	struct target *target = bank->target;
+  struct target *target = bank->target;
   uint32_t fctl;
   int retval;
 
   retval = target_read_u32(target, CC_FCTL_REG, &fctl);
-	if (retval != ERROR_OK) return retval;
+  if (retval != ERROR_OK) return retval;
   retval = target_write_u32(target, CC_FCTL_REG, fctl | mask);
-	if (retval != ERROR_OK) return retval;
+  if (retval != ERROR_OK) return retval;
 
   return ERROR_OK;
 }
 
 static int cc2xxx_protect_check(struct flash_bank *bank)
 {
-	struct target *target = bank->target;
+  struct target *target = bank->target;
 
   uint32_t lock_bit_base;
   cc2xxx_get_lock_bit_base(bank, &lock_bit_base);
@@ -143,21 +143,21 @@ static int cc2xxx_protect_check(struct flash_bank *bank)
   uint8_t lock_bits;
 
   int i, j, retval;
-	for (i=0;i<bytes_to_read;++i) {
+  for (i=0;i<bytes_to_read;++i) {
     retval = target_read_u8(target, lock_bit_base + i, &lock_bits);
-	  if (retval != ERROR_OK) return retval;
+    if (retval != ERROR_OK) return retval;
     for(j=0;j<8 && 8*i+j < bank->num_sectors;++j) {
       // 1 - write/erase allowed, 0 - write/erase blocked
-		  bank->sectors[8*i + j].is_protected = lock_bits & (1<<j) ? 0 : 1;
+      bank->sectors[8*i + j].is_protected = lock_bits & (1<<j) ? 0 : 1;
     }
-	}
+  }
 
   return ERROR_OK;
 }
 
 static int cc2xxx_erase(struct flash_bank *bank, int first, int last)
 {
-	struct target *target = bank->target;
+  struct target *target = bank->target;
   int retval;
 
   if(first > last || first < 0 || last >= bank->num_sectors) {
@@ -168,15 +168,15 @@ static int cc2xxx_erase(struct flash_bank *bank, int first, int last)
   int i;
   for(i=first;i<=last;++i) {
    retval = cc2xxx_wait(bank, CC_FIRST_TIMEOUT);
-	 if (retval != ERROR_OK) return retval;
+   if (retval != ERROR_OK) return retval;
 
    retval = target_write_u32(target, CC_FADDR_REG, i << CC_FLASH_PAGE_ADDR_SHIFT);
-	 if (retval != ERROR_OK) return retval;
+   if (retval != ERROR_OK) return retval;
    retval = cc2xxx_fctl_set(bank, CC_FCTL_ERASE);
-	 if (retval != ERROR_OK) return retval;
+   if (retval != ERROR_OK) return retval;
 
    retval = cc2xxx_wait(bank, CC_ERASE_TIMEOUT);
-	 if (retval != ERROR_OK) return retval;
+   if (retval != ERROR_OK) return retval;
 
    bank->sectors[i].is_erased = 1;
   }
@@ -186,22 +186,22 @@ static int cc2xxx_erase(struct flash_bank *bank, int first, int last)
 
 static int cc2xxx_protect(struct flash_bank *bank, int set, int first, int last)
 {
-	NYI;
+  NYI;
 }
 
 static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
-		uint32_t offset, uint32_t count)
+    uint32_t offset, uint32_t count)
 {
-	NYI;
+  NYI;
 }
 
 static int cc2xxx_fetch_info(struct flash_bank *bank) {
-	struct target *target = bank->target;
-	struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
+  struct target *target = bank->target;
+  struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
 
   uint32_t diecfg0;
   int retval = target_read_u32(target, CC_DIECFG0_REG, &diecfg0);
-	if (retval != ERROR_OK) return retval;
+  if (retval != ERROR_OK) return retval;
 
   cc2xxx_info->chip_id = (uint16_t) (diecfg0 >> 16);
 
@@ -221,15 +221,15 @@ static int cc2xxx_fetch_info(struct flash_bank *bank) {
       return ERROR_FAIL;
   }
 
-	return ERROR_OK;
+  return ERROR_OK;
 }
 
 static int cc2xxx_probe(struct flash_bank *bank)
 {
-	struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
+  struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
 
   int retval = cc2xxx_fetch_info(bank);
-	if (retval != ERROR_OK) return retval;
+  if (retval != ERROR_OK) return retval;
 
   LOG_INFO("chip id: 0x%04hx", cc2xxx_info->chip_id);
   LOG_INFO("flash size: %d bytes", cc2xxx_info->flash_size_b);
@@ -245,19 +245,19 @@ static int cc2xxx_probe(struct flash_bank *bank)
   // Do not touch the last page - it's Lock Bit & CCA Page
   bank->num_sectors = (cc2xxx_info->flash_size_b / CC_FLASH_PAGE_SIZE) - 1;
 
-	bank->sectors = malloc(sizeof(struct flash_sector) * bank->num_sectors);
-	if (!bank->sectors) {
+  bank->sectors = malloc(sizeof(struct flash_sector) * bank->num_sectors);
+  if (!bank->sectors) {
     LOG_WARNING("cannot allocate host memory");
-		return ERROR_FAIL;
+    return ERROR_FAIL;
   }
 
   int i;
-	for (i=0;i<bank->num_sectors;++i) {
-		bank->sectors[i].offset = i * CC_FLASH_PAGE_SIZE;
-		bank->sectors[i].size = CC_FLASH_PAGE_SIZE;
-		bank->sectors[i].is_erased = -1;
-		bank->sectors[i].is_protected = 1;
-	}
+  for (i=0;i<bank->num_sectors;++i) {
+    bank->sectors[i].offset = i * CC_FLASH_PAGE_SIZE;
+    bank->sectors[i].size = CC_FLASH_PAGE_SIZE;
+    bank->sectors[i].is_erased = -1;
+    bank->sectors[i].is_protected = 1;
+  }
 
   uint32_t lock_bit_base;
   cc2xxx_get_lock_bit_base(bank, &lock_bit_base);
@@ -274,10 +274,10 @@ static int cc2xxx_probe(struct flash_bank *bank)
 
 static int cc2xxx_info(struct flash_bank *bank, char *buf, int buf_size)
 {
-	struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
+  struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
 
   int retval = cc2xxx_fetch_info(bank);
-	if (retval != ERROR_OK) return retval;
+  if (retval != ERROR_OK) return retval;
 
   int wrote = 0;
 
@@ -303,38 +303,38 @@ static int cc2xxx_info(struct flash_bank *bank, char *buf, int buf_size)
 
 static int cc2xxx_auto_probe(struct flash_bank *bank)
 {
-	struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
-	if (cc2xxx_info->probed)
-		return ERROR_OK;
-	return cc2xxx_probe(bank);
+  struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
+  if (cc2xxx_info->probed)
+    return ERROR_OK;
+  return cc2xxx_probe(bank);
 }
 
 static const struct command_registration cc2xxx_exec_command_handlers[] = {
-	COMMAND_REGISTRATION_DONE
+  COMMAND_REGISTRATION_DONE
 };
 
 static const struct command_registration cc2xxx_command_handlers[] = {
-	{
-		.name = "cc2xxx",
-		.mode = COMMAND_ANY,
-		.help = "cc2xxx flash command group",
-		.usage = "",
-		.chain = cc2xxx_exec_command_handlers,
-	},
-	COMMAND_REGISTRATION_DONE
+  {
+    .name = "cc2xxx",
+    .mode = COMMAND_ANY,
+    .help = "cc2xxx flash command group",
+    .usage = "",
+    .chain = cc2xxx_exec_command_handlers,
+  },
+  COMMAND_REGISTRATION_DONE
 };
 
 struct flash_driver cc2xxx_flash = {
-	.name = "cc2xxx",
-	.commands = cc2xxx_command_handlers,
-	.flash_bank_command = cc2xxx_flash_bank_command,
-	.erase = cc2xxx_erase,
-	.protect = cc2xxx_protect,
-	.write = cc2xxx_write,
-	.read = default_flash_read,
-	.probe = cc2xxx_probe,
-	.erase_check = default_flash_blank_check,
-	.protect_check = cc2xxx_protect_check,
-	.info = cc2xxx_info,
-	.auto_probe = cc2xxx_auto_probe,
+  .name = "cc2xxx",
+  .commands = cc2xxx_command_handlers,
+  .flash_bank_command = cc2xxx_flash_bank_command,
+  .erase = cc2xxx_erase,
+  .protect = cc2xxx_protect,
+  .write = cc2xxx_write,
+  .read = default_flash_read,
+  .probe = cc2xxx_probe,
+  .erase_check = default_flash_blank_check,
+  .protect_check = cc2xxx_protect_check,
+  .info = cc2xxx_info,
+  .auto_probe = cc2xxx_auto_probe,
 };
