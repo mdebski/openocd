@@ -50,8 +50,14 @@
 #define CC_FCTL_FULL        (1<<6)
 #define CC_FCTL_BUSY        (1<<7)
 
+#define CC_FIRST_TIMEOUT    1
+#define CC_ERASE_TIMEOUT    20
+
 // Number of first byte in CCA page which contains lock bits.
 #define CC_LOCK_BITS_OFFSET 2016
+
+// When erasing, page number should be written to FADDR[16:9]
+#define CC_FLASH_PAGE_ADDR_SHIFT 9
 
 #define NYI LOG_ERROR("Not Implemented Yet"); return ERROR_FAIL;
 
@@ -92,6 +98,37 @@ static int cc2xxx_get_lock_bit_base(struct flash_bank *bank, uint32_t *lock_bit_
   return ERROR_OK;
 }
 
+static int cc2xxx_wait(struct flash_bank *bank, int timeout)
+{
+	struct target *target = bank->target;
+  uint32_t fctl;
+  int retval;
+
+  while(timeout--) {
+    retval = target_read_u32(target, CC_FCTL_REG, &fctl);
+	  if (retval != ERROR_OK) return retval;
+    if((fctl & CC_FCTL_BUSY) == 0) return ERROR_OK;
+    alive_sleep(1);
+  }
+
+  LOG_ERROR("timeout reached");
+  return ERROR_FAIL;
+}
+
+static int cc2xxx_fctl_set(struct flash_bank *bank, uint32_t mask)
+{
+	struct target *target = bank->target;
+  uint32_t fctl;
+  int retval;
+
+  retval = target_read_u32(target, CC_FCTL_REG, &fctl);
+	if (retval != ERROR_OK) return retval;
+  retval = target_write_u32(target, CC_FCTL_REG, fctl | mask);
+	if (retval != ERROR_OK) return retval;
+
+  return ERROR_OK;
+}
+
 static int cc2xxx_protect_check(struct flash_bank *bank)
 {
 	struct target *target = bank->target;
@@ -120,7 +157,31 @@ static int cc2xxx_protect_check(struct flash_bank *bank)
 
 static int cc2xxx_erase(struct flash_bank *bank, int first, int last)
 {
-	NYI;
+	struct target *target = bank->target;
+  int retval;
+
+  if(first > last || first < 0 || last >= bank->num_sectors) {
+    LOG_ERROR("invalid erase params: %d, %d", first, last);
+    return ERROR_FAIL;
+  }
+
+  int i;
+  for(i=first;i<=last;++i) {
+   retval = cc2xxx_wait(bank, CC_FIRST_TIMEOUT);
+	 if (retval != ERROR_OK) return retval;
+
+   retval = target_write_u32(target, CC_FADDR_REG, i << CC_FLASH_PAGE_ADDR_SHIFT);
+	 if (retval != ERROR_OK) return retval;
+   retval = cc2xxx_fctl_set(bank, CC_FCTL_ERASE);
+	 if (retval != ERROR_OK) return retval;
+
+   retval = cc2xxx_wait(bank, CC_ERASE_TIMEOUT);
+	 if (retval != ERROR_OK) return retval;
+
+   bank->sectors[i].is_erased = 1;
+  }
+
+  return ERROR_OK;
 }
 
 static int cc2xxx_protect(struct flash_bank *bank, int set, int first, int last)
