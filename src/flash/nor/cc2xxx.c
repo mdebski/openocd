@@ -51,6 +51,7 @@
 #define CC_FCTL_ABORT       (1<<5)
 #define CC_FCTL_FULL        (1<<6)
 #define CC_FCTL_BUSY        (1<<7)
+#define CC_FCTL_UPPER       (1<<9)
 #define CC_FCTL_CACHE       ((1<<2) | (1<<3))
 
 #define CC_FIRST_TIMEOUT    1
@@ -135,9 +136,11 @@ static int cc2xxx_fctl_set(struct flash_bank *bank, uint32_t mask)
 static int cc2xxx_protect_check(struct flash_bank *bank)
 {
   struct target *target = bank->target;
+  int i, j, retval;
 
   uint32_t lock_bit_base;
-  cc2xxx_get_lock_bit_base(bank, &lock_bit_base);
+  retval = cc2xxx_get_lock_bit_base(bank, &lock_bit_base);
+  if (retval != ERROR_OK) return retval;
 
   LOG_DEBUG("lock_bit_base: %08x", lock_bit_base);
 
@@ -145,15 +148,18 @@ static int cc2xxx_protect_check(struct flash_bank *bank)
   int bytes_to_read = (bank->num_sectors + 7) / 8;
   uint8_t lock_bits;
 
-  int i, j, retval;
   for (i=0;i<bytes_to_read;++i) {
     retval = target_read_u8(target, lock_bit_base + i, &lock_bits);
     if (retval != ERROR_OK) return retval;
-    for(j=0;j<8 && 8*i+j < bank->num_sectors;++j) {
+    for(j=0;j<8 && 8*i+j < bank->num_sectors - 1;++j) {
       // 1 - write/erase allowed, 0 - write/erase blocked
       bank->sectors[8*i + j].is_protected = lock_bits & (1<<j) ? 0 : 1;
     }
   }
+
+  // Last page is protected only by a bit in FCTL, we will always lift the
+  // protection on erase/write.
+  bank->sectors[bank->num_sectors-1].is_protected = 0;
 
   return ERROR_OK;
 }
@@ -175,7 +181,15 @@ static int cc2xxx_erase(struct flash_bank *bank, int first, int last)
 
    retval = target_write_u32(target, CC_FADDR_REG, i << CC_FLASH_PAGE_ADDR_SHIFT);
    if (retval != ERROR_OK) return retval;
-   retval = cc2xxx_fctl_set(bank, CC_FCTL_ERASE);
+
+   if(i == bank->num_sectors - 1) {
+    // Special handling of last page - set UPPER_PAGE_ACCESS.
+    // Erasing is quite safe - it sets config bytes to 0xff, which means
+    // write/erase allowed to all pages, jtag enabled.
+    retval = cc2xxx_fctl_set(bank, CC_FCTL_ERASE | CC_FCTL_UPPER);
+   } else {
+    retval = cc2xxx_fctl_set(bank, CC_FCTL_ERASE);
+   }
    if (retval != ERROR_OK) return retval;
 
    retval = cc2xxx_wait(bank, CC_ERASE_TIMEOUT);
@@ -346,8 +360,7 @@ static int cc2xxx_probe(struct flash_bank *bank)
 
   bank->base = CC_FLASH_BASE;
   bank->size = cc2xxx_info->flash_size_b;
-  // Do not touch the last page - it's Lock Bit & CCA Page
-  bank->num_sectors = (cc2xxx_info->flash_size_b / CC_FLASH_PAGE_SIZE) - 1;
+  bank->num_sectors = (cc2xxx_info->flash_size_b / CC_FLASH_PAGE_SIZE);
 
   bank->sectors = malloc(sizeof(struct flash_sector) * bank->num_sectors);
   if (!bank->sectors) {
