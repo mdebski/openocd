@@ -61,7 +61,13 @@
 #define CC_LOCK_BITS_OFFSET 2016
 
 // When erasing, page number should be written to FADDR[16:9]
-#define CC_FLASH_PAGE_ADDR_SHIFT 9
+
+// But... Contrary to what the datasheet (8.10.1.2 -> FLASH_CTRL_FADDR) says,
+// this register seems to be right shifted by two on *write* not read.
+// That is, to write to bit b you need to write 1<<(b+2). This makes some sense
+// as that way you operate all the time on byte-addresses not word-addresses.
+// Also, bits 0, 1 are ignored on write - as flash writes need to be word-aligned.
+#define CC_FLASH_PAGE_ADDR_SHIFT 11
 
 #define NYI LOG_ERROR("Not Implemented Yet"); return ERROR_FAIL;
 
@@ -239,6 +245,7 @@ static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
 {
 	struct target *target = bank->target;
   struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
+  // See note at CC_FLASH_PAGE_ADDR_SHIFT definition.
 	uint32_t addr = ((CC_FLASH_TOP - CC_FLASH_BASE) & offset);
 	struct working_area *target_buf;
 	struct working_area *target_write_alg;
