@@ -302,9 +302,10 @@ static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
     // protect us from breaking stuff there. This won't work if write algorithm
     // (the one executed on target) isn't sane ex. writes to random locations...
     // When modifying it, test first with those lines commented out!
-    LOG_INFO("Will write to upper page, setting access bit.");
-    retval = cc2xxx_fctl_set(bank, CC_FCTL_UPPER);
-    if (retval != ERROR_OK) return retval;
+
+    //LOG_INFO("Will write to upper page, setting access bit.");
+    //retval = cc2xxx_fctl_set(bank, CC_FCTL_UPPER);
+    //if (retval != ERROR_OK) return retval;
   }
 
   // Disable cache
