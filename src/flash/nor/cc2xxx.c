@@ -95,17 +95,26 @@ FLASH_BANK_COMMAND_HANDLER(cc2xxx_flash_bank_command)
   return ERROR_OK;
 }
 
+static int cc2xxx_flash_addr_sanity_check(uint32_t addr) {
+  if(addr > CC_FLASH_TOP || addr < CC_FLASH_BASE) {
+    LOG_ERROR("invalid flash address: %08x", addr);
+    return ERROR_FAIL;
+  }
+  return ERROR_OK;
+}
+
+static int cc2xxx_get_upper_page_base(struct flash_bank *bank, uint32_t *upper_page_base) {
+  struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
+  *upper_page_base = CC_FLASH_BASE + cc2xxx_info->flash_size_b
+                   - CC_FLASH_PAGE_SIZE;
+  return cc2xxx_flash_addr_sanity_check(*upper_page_base);
+}
+
 static int cc2xxx_get_lock_bit_base(struct flash_bank *bank, uint32_t *lock_bit_base) {
   struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
   *lock_bit_base = CC_FLASH_BASE + cc2xxx_info->flash_size_b
                    - CC_FLASH_PAGE_SIZE + CC_LOCK_BITS_OFFSET;
-
-  if(*lock_bit_base < CC_FLASH_BASE || *lock_bit_base > CC_FLASH_TOP) {
-    LOG_ERROR("invalid lock_bit_base: %08x", *lock_bit_base);
-    return ERROR_FAIL;
-  }
-
-  return ERROR_OK;
+  return cc2xxx_flash_addr_sanity_check(*lock_bit_base);
 }
 
 static int cc2xxx_wait(struct flash_bank *bank, int timeout)
