@@ -111,6 +111,10 @@ static int cc2xxx_wait(struct flash_bank *bank, int timeout)
   while(timeout--) {
     retval = target_read_u32(target, CC_FCTL_REG, &fctl);
     if (retval != ERROR_OK) return retval;
+    if(fctl & CC_FCTL_ABORT) {
+      LOG_ERROR("Operation aborted by flash controller.");
+      return ERROR_FAIL;
+    }
     if((fctl & CC_FCTL_BUSY) == 0) return ERROR_OK;
     alive_sleep(1);
   }
