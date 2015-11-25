@@ -262,7 +262,9 @@ static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
 	struct reg_param reg_params[4];
 	struct armv7m_algorithm armv7m_info;
   int retval;
-  uint32_t lock_bit_base;
+  uint32_t upper_page_base, lock_bit_base;
+  retval = cc2xxx_get_upper_page_base(bank, &upper_page_base);
+  if (retval != ERROR_OK) return retval;
   retval = cc2xxx_get_lock_bit_base(bank, &lock_bit_base);
   if (retval != ERROR_OK) return retval;
 
@@ -293,6 +295,16 @@ static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
 		LOG_WARNING("Padding %d bytes to keep 4-byte write size",
 					       count & 3);
 		count = (count + 3) & ~3;
+  }
+
+  if (offset + CC_FLASH_BASE + count > upper_page_base) {
+    // Enable upper page access if needed. Hopefully checks above will
+    // protect us from breaking stuff there. This won't work if write algorithm
+    // (the one executed on target) isn't sane ex. writes to random locations...
+    // When modifying it, test first with those lines commented out!
+    LOG_INFO("Will write to upper page, setting access bit.");
+    retval = cc2xxx_fctl_set(bank, CC_FCTL_UPPER);
+    if (retval != ERROR_OK) return retval;
   }
 
   // Disable cache
@@ -353,6 +365,14 @@ static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
 	uint32_t error = buf_get_u32(reg_params[0].value, 0, 32);
 
   // Clean up before checking error
+
+  // Clear UPPER_PAGE_ACCESS. It may not even be set, but whatever,
+  // we really want it low most of the time.
+  int retval2 = cc2xxx_fctl_clear(bank, CC_FCTL_UPPER);
+  if(retval2 != ERROR_OK) {
+    LOG_WARNING("error cleaning upper page lock bit, danger!");
+  }
+
   target_free_working_area(target, target_buf);
   target_free_working_area(target, target_write_alg);
 
@@ -365,6 +385,7 @@ static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
     LOG_ERROR("write algorithm error: %08x, retval: %d", error, retval);
     return ERROR_FAIL;
   }
+  if(retval2 != ERROR_OK) return retval2;
 
   return ERROR_OK;
 }
