@@ -287,12 +287,8 @@ static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
   }
 
   // Disable cache
-  uint32_t fctl;
-  retval = target_read_u32(target, CC_FCTL_REG, &fctl);
-  if(retval != ERROR_OK) return retval;
-  fctl &= ~CC_FCTL_CACHE;
-  retval = target_write_u32(target, CC_FCTL_REG, fctl);
-  if(retval != ERROR_OK) return retval;
+  retval = cc2xxx_fctl_clear(bank, CC_FCTL_CACHE);
+  if (retval != ERROR_OK) return retval;
 
 	armv7m_info.common_magic = ARMV7M_COMMON_MAGIC;
 	armv7m_info.core_mode = ARM_MODE_THREAD;
