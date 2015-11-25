@@ -261,7 +261,7 @@ static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
 	uint32_t buf_size = 8192;
 	struct reg_param reg_params[4];
 	struct armv7m_algorithm armv7m_info;
-  int retval;
+  int retval, retval2 = ERROR_OK;
   uint32_t upper_page_base, lock_bit_base;
   retval = cc2xxx_get_upper_page_base(bank, &upper_page_base);
   if (retval != ERROR_OK) return retval;
@@ -366,11 +366,12 @@ static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
 
   // Clean up before checking error
 
-  // Clear UPPER_PAGE_ACCESS. It may not even be set, but whatever,
-  // we really want it low most of the time.
-  int retval2 = cc2xxx_fctl_clear(bank, CC_FCTL_UPPER);
-  if(retval2 != ERROR_OK) {
-    LOG_WARNING("error cleaning upper page lock bit, danger!");
+  if (offset + CC_FLASH_BASE + count > upper_page_base) {
+    retval2 = cc2xxx_fctl_clear(bank, CC_FCTL_UPPER);
+      LOG_INFO("Clearing upper page access bit.");
+    if(retval2 != ERROR_OK) {
+      LOG_WARNING("error cleaning upper page lock bit, danger!");
+    }
   }
 
   target_free_working_area(target, target_buf);
