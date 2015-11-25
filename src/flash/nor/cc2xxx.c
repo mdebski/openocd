@@ -137,6 +137,24 @@ static int cc2xxx_fctl_set(struct flash_bank *bank, uint32_t mask)
   return ERROR_OK;
 }
 
+static int cc2xxx_fctl_clear(struct flash_bank *bank, uint32_t mask)
+{
+  struct target *target = bank->target;
+  uint32_t fctl;
+  int retval;
+
+  LOG_DEBUG("clear");
+
+  retval = target_read_u32(target, CC_FCTL_REG, &fctl);
+  if (retval != ERROR_OK) return retval;
+  retval = target_write_u32(target, CC_FCTL_REG, fctl & ~mask);
+  if (retval != ERROR_OK) return retval;
+
+  LOG_DEBUG("end clear");
+
+  return ERROR_OK;
+}
+
 static int cc2xxx_protect_check(struct flash_bank *bank)
 {
   struct target *target = bank->target;
@@ -198,6 +216,12 @@ static int cc2xxx_erase(struct flash_bank *bank, int first, int last)
 
    retval = cc2xxx_wait(bank, CC_ERASE_TIMEOUT);
    if (retval != ERROR_OK) return retval;
+
+   if(i == bank->num_sectors - 1) {
+    // Clear UPPER_PAGE_ACCESS.
+    retval = cc2xxx_fctl_clear(bank, CC_FCTL_UPPER);
+    if (retval != ERROR_OK) return retval;
+   }
 
    bank->sectors[i].is_erased = 1;
   }
