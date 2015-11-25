@@ -210,6 +210,7 @@ static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
     uint32_t offset, uint32_t count)
 {
 	struct target *target = bank->target;
+  struct cc2xxx_flash_bank *cc2xxx_info = bank->driver_priv;
 	uint32_t addr = ((CC_FLASH_TOP - CC_FLASH_BASE) & offset);
 	struct working_area *target_buf;
 	struct working_area *target_write_alg;
@@ -217,6 +218,21 @@ static int cc2xxx_write(struct flash_bank *bank, const uint8_t *buffer,
 	struct reg_param reg_params[4];
 	struct armv7m_algorithm armv7m_info;
   int retval;
+  uint32_t lock_bit_base;
+  retval = cc2xxx_get_lock_bit_base(bank, &lock_bit_base);
+  if (retval != ERROR_OK) return retval;
+
+  if (offset + CC_FLASH_BASE > CC_FLASH_TOP || offset > cc2xxx_info->flash_size_b) {
+		LOG_ERROR("Invalid offset: %d", offset);
+		return ERROR_FAIL;
+  }
+
+  LOG_DEBUG("write offset = %08x, count = %x", offset, count);
+
+  if (offset + CC_FLASH_BASE + count > lock_bit_base) {
+		LOG_ERROR("Attempting direct write to lock bits (%d), disallowing.", offset);
+		return ERROR_FAIL;
+  }
 
 	if (bank->target->state != TARGET_HALTED) {
 		LOG_ERROR("Target not halted");
