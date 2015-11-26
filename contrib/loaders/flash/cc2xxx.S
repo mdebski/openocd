@@ -75,12 +75,12 @@ wait_fifo:
   ldr   r8, CC_FWDATA_REG
   str   r6, [r8]
 
-busy:
+full:
   /* Wait for fctl.full == 0 */
 	ldr 	r8, CC_FCTL_REG
   ldr   r6, [r8]
 	tst 	r6, #64 /* FULL */
-	bne 	busy
+	bne 	full
 
   tst r6, #32 /* if fctl.abort == 1 page is locked */
   bne   error
@@ -88,11 +88,12 @@ busy:
   beq   error
 
 	cmp 	r7, r1		/* wrap rp at end of buffer */
-	it  	cs
-	addcs	r7, r0, #8	/* skip loader args */
+	it  	hs
+	addhs	r7, r0, #8	/* skip loader args */
 	str 	r7, [r0, #4]	/* store rp */
 	subs	r3, r3, #1	/* decrement word count */
 	cbz 	r3, ok	/* loop if not done */
+  dsb
 	b	wait_fifo
 
 ok:
@@ -103,6 +104,12 @@ error:
 	movs	r1, #0
 	str	r1, [r0, #4]	/* set rp = 0 on error */
 exit:
+  /* wait for write to finish */
+busy:
+	ldr 	r8, CC_FCTL_REG
+  ldr   r6, [r8]
+	tst 	r6, #128 /* BUSY */
+	bne 	busy
 	bkpt	#0x00
 
 .align 2
