@@ -35,6 +35,7 @@
  * r1 = workarea end
  * r2 = target address
  * r3 = count
+ * r4 = circural buffer size
  *
  * Clobbered:
  * r6 - temp
@@ -51,9 +52,14 @@ wait_fifo:
 	cmp 	r8, #0		/* abort if wp == 0 */
 	beq 	ok
 	ldr 	r7, [r0, #4]	/* read rp */
-	subs	r6, r8, r7	/* number of bytes available for read in r6*/
-	cmp 	r6, #3		/* wait until 4 bytes are available */
-	bcc 	wait_fifo
+	subs	r6, r8, r7
+  /* if wrapped around, i.e. wp < rp */
+  it    mi
+  addmi r6, r4
+  /* number of bytes available for read in r6*/
+	cmp 	r6, #4		/* wait until 4 bytes are available */
+	blo 	wait_fifo
+  dsb
 
   /* Set fctl.write.
    * It may be already set in subsequent iterations, but also may not,
